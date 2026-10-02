@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding Frequency</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc; /* Slate 50 */
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7); /* Slate 800 with opacity */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+        }
+
+        /* Pendulum Animation */
+        .pendulum-container {
+            position: relative;
+            width: 200px;
+            height: 250px;
+            margin: 0 auto;
+            border-top: 4px solid #475569; /* Slate 600 */
+        }
+
+        .pendulum {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform-origin: top center;
+            /* Animation will be handled by JS for dynamic frequency */
+        }
+
+        .pendulum-string {
+            width: 2px;
+            height: 180px;
+            background-color: #94a3b8; /* Slate 400 */
+            margin: 0 auto;
+        }
+
+        .pendulum-bob {
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle at 30% 30%, #38bdf8, #0284c7); /* Sky 400 to Sky 600 */
+            border-radius: 50%;
+            margin-left: -19px; /* Half width - string width/2 */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Wave Animation */
+        .wave-container {
+            width: 100%;
+            height: 150px;
+            overflow: hidden;
+            position: relative;
+            background: #1e293b; /* Slate 800 */
+            border-radius: 0.5rem;
+            border: 1px solid #334155; /* Slate 700 */
+        }
+        
+        #waveCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Blinker */
+        .blinker {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: #334155; /* Default off state */
+            margin: 0 auto;
+            transition: background-color 0.1s, box-shadow 0.1s;
+        }
+
+        .blinker.active {
+            background-color: #fbbf24; /* Amber 400 */
+            box-shadow: 0 0 30px #fbbf24, inset 0 0 10px #fffbeb;
+        }
+
+        /* Custom Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #38bdf8; /* Sky 400 */
+            cursor: pointer;
+            margin-top: -10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #475569; /* Slate 600 */
+            border-radius: 3px;
+        }
+
+        input[type=range]:focus {
+            outline: none;
+        }
+        
+        .tab-btn.active {
+            background-color: #38bdf8;
+            color: #0f172a;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4 sm:p-8">
+
+    <div class="max-w-4xl w-full">
+        
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-extrabold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-sky-400 to-indigo-400">
+                What is Frequency?
+            </h1>
+            <p class="text-lg text-slate-300 max-w-2xl mx-auto">
+                Simply put, frequency is <strong class="text-sky-300">how often something happens</strong> over a specific amount of time. 
+                Usually, we measure this in "events per second", known as <strong>Hertz (Hz)</strong>.
+            </p>
+        </header>
+
+        <!-- Main Control Panel -->
+        <div class="glass-panel p-6 mb-8 sticky top-4 z-10">
+            <div class="flex flex-col md:flex-row items-center gap-6">
+                
+                <div class="w-full md:w-2/3">
+                    <div class="flex justify-between mb-2">
+                        <label for="freqSlider" class="text-sm font-semibold uppercase tracking-wider text-slate-400">Master Frequency</label>
+                        <span id="freqDisplay" class="font-mono text-xl text-sky-400 font-bold">1.0 Hz</span>
+                    </div>
+                    <input type="range" id="freqSlider" min="0.1" max="5" step="0.1" value="1" class="w-full">
+                    <div class="flex justify-between text-xs text-slate-500 mt-2">
+                        <span>Slow (0.1 Hz)</span>
+                        <span>Fast (5.0 Hz)</span>
+                    </div>
+                </div>
+
+                <div class="w-full md:w-1/3 flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
+                    <div class="text-3xl font-bold mb-1" id="eventCounter">0</div>
+                    <div class="text-xs text-slate-400 uppercase tracking-wide">Events Total</div>
+                    
+                    <button id="resetBtn" class="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-md text-sm transition-colors flex items-center gap-2">
+                        <i class="fas fa-undo"></i> Reset Count
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Explainer Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            
+            <!-- Example 1: The Blinker -->
+            <div class="glass-panel p-6 flex flex-col h-full">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
+                        <i class="fas fa-lightbulb"></i>
+                    </div>
+                    <h2 class="text-xl font-bold">Blinking Light</h2>
+                </div>
+                <p class="text-sm text-slate-400 mb-6 flex-grow">
+                    The simplest example. A frequency of 1 Hz means the light flashes exactly once every second. 
+                    <span id="blinkerDesc" class="block mt-2 text-amber-200">Currently flashing 1 time per second.</span>
+                </p>
+                
+                <div class="bg-slate-800 rounded-lg p-6 flex items-center justify-center min-h-[150px]">
+                    <div id="lightBulb" class="blinker"></div>
+                </div>
+            </div>
+
+            <!-- Example 2: The Pendulum -->
+            <div class="glass-panel p-6 flex flex-col h-full">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-8 h-8 rounded-full bg-sky-500/20 flex items-center justify-center text-sky-400">
+                        <i class="fas fa-stopwatch"></i>
+                    </div>
+                    <h2 class="text-xl font-bold">Swinging Pendulum</h2>
+                </div>
+                <p class="text-sm text-slate-400 mb-6 flex-grow">
+                    Physical movement. One full cycle (back and forth) is one event. 
+                    <span id="pendulumDesc" class="block mt-2 text-sky-200">Completing 1 cycle per second.</span>
+                </p>
+                
+                <div class="bg-slate-800 rounded-lg p-4 flex items-center justify-center min-h-[150px]">
+                    <div class="pendulum-container">
+                        <div id="swingingPendulum" class="pendulum">
+                            <div class="pendulum-string"></div>
+                            <div class="pendulum-bob"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Example 3: The Wave -->
+            <div class="glass-panel p-6 flex flex-col h-full">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                    <h2 class="text-xl font-bold">Data / Sound Wave</h2>
+                </div>
+                <p class="text-sm text-slate-400 mb-6 flex-grow">
+                    How signals travel. Higher frequency means more waves fit into the same time space (higher pitch in sound).
+                    <span id="waveDesc" class="block mt-2 text-indigo-200">1 peak passing per second.</span>
+                </p>
+                
+                <div class="wave-container">
+                    <canvas id="waveCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sound Section -->
+        <div class="glass-panel p-6 mb-8 text-center border border-indigo-500/30">
+            <h2 class="text-2xl font-bold mb-4 flex items-center justify-center gap-3">
+                <i class="fas fa-headphones text-indigo-400"></i> Hear Frequency (Pitch)
+            </h2>
+            <p class="text-slate-300 mb-6 max-w-xl mx-auto">
+                In audio, frequency determines pitch. Human hearing ranges from roughly 20 Hz (very low rumble) to 20,000 Hz (piercing high pitch).
+            </p>
+            
+            <div class="max-w-md mx-auto bg-slate-800 rounded-xl p-6">
+                <div class="mb-4">
+                    <button id="toggleSoundBtn" class="w-full py-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/50">
+                        <i class="fas fa-play"></i> <span>Play Tone</span>
+                    </button>
+                    <p class="text-xs text-slate-400 mt-2">*Warning: Start with low volume</p>
+                </div>
+                
+                <div class="mt-6 text-left">
+                    <div class="flex justify-between mb-2">
+                        <label for="audioFreqSlider" class="text-sm font-semibold text-slate-400">Audio Frequency (Hz)</label>
+                        <span id="audioFreqDisplay" class="font-mono text-indigo-400 font-bold">440 Hz</span>
+                    </div>
+                    <input type="range" id="audioFreqSlider" min="20" max="2000" step="1" value="440">
+                    <div class="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>20 Hz (Low)</span>
+                        <span>2000 Hz (High)</span>
+                    </div>
+                </div>
+                <p class="mt-4 text-sm text-slate-300">
+                    440 Hz is the standard tuning note "A".
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // State
+            let currentFrequency = 1.0; // Hz (cycles per second)
+            let totalEvents = 0;
+            
+            // DOM Elements
+            const freqSlider = document.getElementById('freqSlider');
+            const freqDisplay = document.getElementById('freqDisplay');
+            const eventCounter = document.getElementById('eventCounter');
+            const resetBtn = document.getElementById('resetBtn');
+            
+            const lightBulb = document.getElementById('lightBulb');
+            const blinkerDesc = document.getElementById('blinkerDesc');
+            
+            const pendulum = document.getElementById('swingingPendulum');
+            const pendulumDesc = document.getElementById('pendulumDesc');
+            
+            const waveCanvas = document.getElementById('waveCanvas');
+            const ctx = waveCanvas.getContext('2d');
+            const waveDesc = document.getElementById('waveDesc');
+
+            // --- Blinker Logic ---
+            let blinkerInterval;
+            
+            function updateBlinker() {
+                clearInterval(blinkerInterval);
+                const periodMs = (1 / currentFrequency) * 1000;
+                
+                blinkerDesc.innerText = `Currently flashing ${currentFrequency.toFixed(1)} time(s) per second.`;
+
+                blinkerInterval = setInterval(() => {
+                    // Turn on
+                    lightBulb.classList.add('active');
+                    totalEvents++;
+                    updateCounter();
+                    
+                    // Turn off after a short flash
+                    setTimeout(() => {
+                        lightBulb.classList.remove('active');
+                    }, Math.min(100, periodMs / 2)); // Flash duration max 100ms or half period
+
+                }, periodMs);
+            }
+
+            // --- Pendulum Logic ---
+            let animationFrameId;
+            let startTime = performance.now();
+
+            function updatePendulum() {
+                pendulumDesc.innerText = `Completing ${currentFrequency.toFixed(1)} cycle(s) per second.`;
+                // CSS animation alternative using JS for precise control across frequency changes
+            }
+
+            function animate(currentTime) {
+                // Calculate time delta in seconds
+                const elapsedTime = (currentTime - startTime) / 1000;
+                
+                // Pendulum math
+                // max angle * sin(2 * PI * frequency * time)
+                const maxAngle = 30; // degrees
+                const angle = maxAngle * Math.sin(2 * Math.PI * currentFrequency * elapsedTime);
+                pendulum.style.transform = `rotate(${angle}deg)`;
+
+                // Wave math
+                drawWave(elapsedTime);
+
+                animationFrameId = requestAnimationFrame(animate);
+            }
+
+            // --- Wave Logic ---
+            function resizeCanvas() {
+                const container = waveCanvas.parentElement;
+                waveCanvas.width = container.clientWidth;
+                waveCanvas.height = container.clientHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            function drawWave(time) {
+                ctx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+                
+                ctx.beginPath();
+                ctx.strokeStyle = '#818cf8'; // Indigo 400
+                ctx.lineWidth = 3;
+                
+                const width = waveCanvas.width;
+                const height = waveCanvas.height;
+                const midY = height / 2;
+                
+                // Draw center line
+                ctx.moveTo(0, midY);
+                ctx.lineTo(width, midY);
+                ctx.strokeStyle = '#334155'; // Slate 700
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw actual wave
+                ctx.beginPath();
+                ctx.strokeStyle = '#818cf8'; // Indigo 400
+                ctx.lineWidth = 3;
+                
+                // We want to show 'currentFrequency' number of waves in the view
+                // Let's say the view represents 1 second of time.
+                // So if freq is 1, we see 1 full wave.
+                const pixelsPerSecond = width; 
+                
+                for (let x = 0; x < width; x++) {
+                    // x / width gives us normalized position [0, 1] across the canvas
+                    // we interpret the canvas width as representing 1 second window moving through time
+                    
+                    // Time offset to make it scroll
+                    const timeOffset = time; 
+                    
+                    // Position in time for this specific pixel x
+                    const pixelTime = (x / width) - timeOffset;
+                    
+                    // y = A * sin(2 * PI * f * t)
+                    const amplitude = height * 0.4; // 40% of canvas height
+                    const y = midY + amplitude * Math.sin(2 * Math.PI * currentFrequency * pixelTime);
+                    
+                    if (x === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                
+                waveDesc.innerText = `${currentFrequency.toFixed(1)} peak(s) passing per second.`;
+            }
+
+            // --- Central Control Logic ---
+            function updateCounter() {
+                eventCounter.innerText = totalEvents;
+                // Add a small animation effect
+                eventCounter.classList.add('scale-125', 'text-amber-400');
+                setTimeout(() => {
+                    eventCounter.classList.remove('scale-125', 'text-amber-400');
+                }, 150);
+            }
+
+            function applyFrequency(newFreq) {
+                currentFrequency = parseFloat(newFreq);
+                freqDisplay.innerText = `${currentFrequency.toFixed(1)} Hz`;
+                
+                updateBlinker();
+                updatePendulum();
+            }
+
+            freqSlider.addEventListener('input', (e) => {
+                applyFrequency(e.target.value);
+            });
+
+            resetBtn.addEventListener('click', () => {
+                totalEvents = 0;
+                updateCounter();
+            });
+
+            // Initialize visual animations
+            applyFrequency(freqSlider.value);
+            requestAnimationFrame(animate);
+
+
+            // --- Audio Setup (Tone.js) ---
+            const audioSlider = document.getElementById('audioFreqSlider');
+            const audioDisplay = document.getElementById('audioFreqDisplay');
+            const toggleSoundBtn = document.getElementById('toggleSoundBtn');
+            const btnIcon = toggleSoundBtn.querySelector('i');
+            const btnText = toggleSoundBtn.querySelector('span');
+            
+            let synth = null;
+            let isPlaying = false;
+
+            async function initAudio() {
+                if (!synth) {
+                    await Tone.start();
+                    // Create an oscillator with a smooth sine wave
+                    synth = new Tone.Oscillator({
+                        type: "sine",
+                        frequency: 440,
+                        volume: -10 // Lower volume to avoid startling
+                    }).toDestination();
+                }
+            }
+
+            toggleSoundBtn.addEventListener('click', async () => {
+                await initAudio();
+
+                if (isPlaying) {
+                    synth.stop();
+                    toggleSoundBtn.classList.replace('bg-red-600', 'bg-indigo-600');
+                    toggleSoundBtn.classList.replace('hover:bg-red-500', 'hover:bg-indigo-500');
+                    btnIcon.classList.replace('fa-stop', 'fa-play');
+                    btnText.innerText = "Play Tone";
+                } else {
+                    synth.frequency.value = parseFloat(audioSlider.value);
+                    synth.start();
+                    toggleSoundBtn.classList.replace('bg-indigo-600', 'bg-red-600');
+                    toggleSoundBtn.classList.replace('hover:bg-indigo-500', 'hover:bg-red-500');
+                    btnIcon.classList.replace('fa-play', 'fa-stop');
+                    btnText.innerText = "Stop Tone";
+                }
+                isPlaying = !isPlaying;
+            });
+
+            audioSlider.addEventListener('input', (e) => {
+                const freq = parseFloat(e.target.value);
+                audioDisplay.innerText = `${freq} Hz`;
+                if (synth && isPlaying) {
+                    // Smoothly ramp to the new frequency over 0.1 seconds
+                    synth.frequency.rampTo(freq, 0.1);
+                }
+                
+                // Add contextual text based on frequency range
+                let note = "";
+                if(freq < 60) note = " (Sub-bass, felt more than heard)";
+                else if (freq > 1000) note = " (High pitch, sensitive to ears)";
+                else if (Math.abs(freq - 440) < 5) note = " (Standard tuning note 'A')";
+                
+                audioDisplay.nextElementSibling.nextElementSibling.innerText = 
+                    `${freq} Hz${note}`;
+            });
+        });
+    </script>
+</body>
+</html>
